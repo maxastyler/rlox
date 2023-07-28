@@ -1,3 +1,5 @@
+use num_enum::{IntoPrimitive, TryFromPrimitive};
+
 use crate::{
     chunk::{Chunk, OpCode},
     scanner::{Scanner, Token, TokenType},
@@ -101,7 +103,10 @@ impl<'a> Parser<'a> {
         self.emit_byte(OpCode::OP_RETURN.into(), chunk)
     }
 
-    fn expression(&mut self) {}
+    fn grouping(&mut self, scanner: &mut Scanner, chunk: &mut Chunk) {
+        self.expression(scanner, chunk);
+        self.consume(scanner, TokenType::RIGHT_PAREN);
+    }
 
     fn number(&mut self, chunk: &mut Chunk) {
         let prev = self.previous.as_ref().unwrap();
@@ -121,6 +126,103 @@ impl<'a> Parser<'a> {
             chunk,
         );
     }
+
+    fn unary(&mut self, scanner: &mut Scanner, chunk: &mut Chunk) {
+        let op_type = self.previous.as_ref().unwrap().token_type.clone();
+        self.parse_precedence(scanner, chunk, Precedence::UNARY);
+
+        match op_type {
+            TokenType::MINUS => self.emit_byte(OpCode::OP_NEGATE.into(), chunk),
+            _ => panic!(),
+        }
+    }
+
+    fn binary(&mut self, scanner: &mut Scanner, chunk: &mut Chunk) {
+        let op_type = self.previous.as_ref().unwrap().token_type.clone();
+        let (_, _, precedence) = get_rule(op_type.clone());
+        self.parse_precedence(
+            scanner,
+            chunk,
+            Precedence::try_from(1 + precedence as u8).unwrap(),
+        );
+
+        match op_type {
+            TokenType::PLUS => self.emit_byte(OpCode::OP_ADD.into(), chunk),
+            TokenType::MINUS => self.emit_byte(OpCode::OP_SUBTRACT.into(), chunk),
+            TokenType::STAR => self.emit_byte(OpCode::OP_MULTIPLY.into(), chunk),
+            TokenType::SLASH => self.emit_byte(OpCode::OP_DIVIDE.into(), chunk),
+            _ => panic!(),
+        }
+    }
+
+    fn expression(&mut self, scanner: &mut Scanner, chunk: &mut Chunk) {
+        self.parse_precedence(scanner, chunk, Precedence::ASSIGNMENT);
+    }
+
+    fn parse_precedence(
+        &mut self,
+        scanner: &mut Scanner,
+        chunk: &mut Chunk,
+        precedence: Precedence,
+    ) {
+        self.advance(scanner);
+        let (prefix, _, _) = get_rule(self.previous.as_ref().unwrap().token_type.clone());
+        match prefix {
+            Some(p) => self.prefix_rule(scanner, chunk, p),
+            None => panic!(),
+        }
+        let pu8 = precedence as u8;
+        while pu8 <= get_rule(self.current.as_ref().unwrap().token_type.clone()).2 as u8 {
+            self.advance(scanner);
+            let (_, infix, _) = get_rule(self.current.as_ref().unwrap().token_type.clone());
+            if infix {
+                self.binary(scanner, chunk)
+            }
+        }
+    }
+
+    fn prefix_rule(&mut self, scanner: &mut Scanner, chunk: &mut Chunk, rule: RuleType) {
+        match rule {
+            RuleType::Grouping => self.grouping(scanner, chunk),
+            RuleType::Unary => self.unary(scanner, chunk),
+            RuleType::Number => self.number(chunk),
+        }
+    }
+}
+enum RuleType {
+    Grouping,
+    Unary,
+    Number,
+}
+
+type ParseRule = (Option<RuleType>, bool, Precedence);
+
+fn get_rule(token: TokenType) -> ParseRule {
+    match token {
+        TokenType::LEFT_PAREN => (Some(RuleType::Grouping), false, Precedence::NONE),
+        TokenType::MINUS => (Some(RuleType::Unary), true, Precedence::TERM),
+        TokenType::PLUS => (None, true, Precedence::TERM),
+        TokenType::SLASH => (None, true, Precedence::FACTOR),
+        TokenType::STAR => (None, true, Precedence::FACTOR),
+        TokenType::NUMBER => (Some(RuleType::Number), false, Precedence::NONE),
+        _ => (None, false, Precedence::NONE),
+    }
+}
+
+#[derive(Clone, IntoPrimitive, TryFromPrimitive)]
+#[repr(u8)]
+enum Precedence {
+    NONE,
+    ASSIGNMENT,
+    OR,
+    AND,
+    EQUALITY,
+    COMPARISON,
+    TERM,
+    FACTOR,
+    UNARY,
+    CALL,
+    PRIMARY,
 }
 
 pub fn compile(source: &String, chunk: &mut Chunk) -> bool {
@@ -128,7 +230,7 @@ pub fn compile(source: &String, chunk: &mut Chunk) -> bool {
     let mut parser = Parser::new(&source);
     let mut line: Option<usize> = None;
     scanner.advance(source);
-    parser.expression();
+    parser.expression(&mut scanner, chunk);
     parser.consume(&mut scanner, TokenType::EOF);
     parser.end_compiler(chunk);
     true
