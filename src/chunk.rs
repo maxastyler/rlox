@@ -7,6 +7,11 @@ use crate::value::Value;
 #[repr(u8)]
 pub enum OpCode {
     OP_RETURN,
+    OP_NEGATE,
+    OP_ADD,
+    OP_SUBTRACT,
+    OP_MULTIPLY,
+    OP_DIVIDE,
     OP_CONSTANT,
 }
 
@@ -18,6 +23,15 @@ pub struct Chunk {
 }
 
 impl Chunk {
+    pub fn make_constant(&mut self, value: Value) -> u8 {
+        let c = self.add_constant(value);
+        if c > (u8::MAX as usize) {
+            panic!("Too many constants in chunk!");
+        } else {
+            c as u8
+        }
+    }
+
     pub fn add_constant(&mut self, value: Value) -> usize {
         let index = self.values.len();
         self.values.push(value);
