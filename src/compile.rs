@@ -2,10 +2,12 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use crate::{
     chunk::{Chunk, OpCode},
+    debug::disassemble_chunk,
     scanner::{Scanner, Token, TokenType},
     value::Value,
 };
 
+#[derive(Debug)]
 struct Parser<'a> {
     current: Option<Token>,
     previous: Option<Token>,
@@ -26,15 +28,21 @@ impl<'a> Parser<'a> {
     }
 
     fn advance(&mut self, scanner: &mut Scanner) {
+        println!("The value of T is: {:?}\nscanner: {:?}", self, scanner);
         let prev = std::mem::replace(&mut self.current, None);
         self.previous = prev;
         loop {
-            match scanner.scan_token(self.string).token_type {
+	    println!("The scanner is: {:?}", scanner);
+            let t = scanner.scan_token(self.string);
+	    println!("The token is: {:?}", t);
+            self.current = Some(t.clone());
+            match t.token_type {
                 TokenType::ERROR(_) => {}
                 _ => break,
             }
             self.error_at_current();
         }
+        println!("The value of T is: {:?}\nscanner: {:?}", self, scanner);
     }
 
     fn error(&mut self) {
@@ -100,7 +108,10 @@ impl<'a> Parser<'a> {
     }
 
     fn end_compiler(&self, chunk: &mut Chunk) {
-        self.emit_byte(OpCode::OP_RETURN.into(), chunk)
+        self.emit_byte(OpCode::OP_RETURN.into(), chunk);
+        if !self.had_error {
+            disassemble_chunk(chunk, "code")
+        }
     }
 
     fn grouping(&mut self, scanner: &mut Scanner, chunk: &mut Chunk) {
@@ -166,10 +177,11 @@ impl<'a> Parser<'a> {
         precedence: Precedence,
     ) {
         self.advance(scanner);
+        println!("{:?}", self.previous);
         let (prefix, _, _) = get_rule(self.previous.as_ref().unwrap().token_type.clone());
         match prefix {
             Some(p) => self.prefix_rule(scanner, chunk, p),
-            None => panic!(),
+            None => self.error(),
         }
         let pu8 = precedence as u8;
         while pu8 <= get_rule(self.current.as_ref().unwrap().token_type.clone()).2 as u8 {
@@ -229,7 +241,7 @@ pub fn compile(source: &String, chunk: &mut Chunk) -> bool {
     let mut scanner = Scanner::new();
     let mut parser = Parser::new(&source);
     let mut line: Option<usize> = None;
-    scanner.advance(source);
+    // scanner.advance(source);
     parser.expression(&mut scanner, chunk);
     parser.consume(&mut scanner, TokenType::EOF);
     parser.end_compiler(chunk);

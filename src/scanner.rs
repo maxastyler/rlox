@@ -1,3 +1,4 @@
+#[derive(Debug)]
 pub struct Scanner {
     pub start: usize,
     pub current: usize,
@@ -339,7 +340,7 @@ pub enum TokenType {
     EOF,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Token {
     pub token_type: TokenType,
     pub start: usize,
