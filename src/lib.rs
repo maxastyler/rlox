@@ -5,9 +5,11 @@ use std::{
 
 use vm::VM;
 
+pub mod ast;
 pub mod chunk;
 pub mod compile;
 pub mod debug;
+pub mod parser;
 pub mod scanner;
 pub mod value;
 pub mod vm;
