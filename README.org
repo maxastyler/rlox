@@ -26,6 +26,10 @@ is called again in tail position.
 
 A function of no arguments can be called like f!
 
+Struct:
+
+More complicated...
+
 Grammar:
 
 order of precedence:
@@ -47,10 +51,16 @@ function = 'fn' [symbol] ['('symbol*')'] block
 parenthesised = '(' [expression, ';'] ')'
 block = '{' [expression, ';']+ '}'
 l1 = block | parenthesised | function | literal
-no_arg_call = l1!
+no_arg_call = l1'!'
 l2 = l1 | no_arg_call
 infix = l2 '.' l2 l2*
 l3 = l2 | infix
 call = l3 l3+
-expression = l3 | call
+l4 = l3 | call
+assignment = 'let' symbol '=' expression
+expression = l4 | assignment
 #+end_src
+
+let x 2
+let y 2
+let z 4
