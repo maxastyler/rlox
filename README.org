@@ -1,2 +1,56 @@
 * RLOX
-Implementation of lox in Rust from [[https://craftinginterpreters.com/][crafting interpreters]]
+Implementation of lox in Rust from [[https://craftinginterpreters.com/][crafting interpreters]], but with a different syntax.
+
+Everything in the language is an expression - returns a value.
+
+Built in pipe operator
+
+Structs, not classes
+
+Traits system like rust
+
+Function declaration is done:
+
+fn (Optional name) (args) {block of stuff}
+
+Functions:
+
+fn (x, y) {x .+ x; y .+ y}
+
+fn something (x, y) {x .+ x}
+
+If given a name, then that name is bound in the current block to the function.
+
+Functions have tail recursion - the current stack frame is reused when the surrounding function
+is called again in tail position.
+
+A function of no arguments can be called like f!
+
+Grammar:
+
+order of precedence:
+
+literal
+function
+block
+parenthesised
+no argument call
+infix
+function call
+
+a block introduces a new scope, a parenthesised block doesn't
+
+#+begin_src
+symbol = identifier without spaces
+literal = number | string | boolean | symbol
+function = 'fn' [symbol] ['('symbol*')'] block
+parenthesised = '(' [expression, ';'] ')'
+block = '{' [expression, ';']+ '}'
+l1 = block | parenthesised | function | literal
+no_arg_call = l1!
+l2 = l1 | no_arg_call
+infix = l2 '.' l2 l2*
+l3 = l2 | infix
+call = l3 l3+
+expression = l3 | call
+#+end_src
