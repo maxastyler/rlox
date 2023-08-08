@@ -1,20 +1,31 @@
+use std::rc::Rc;
+
 use crate::chunk::Chunk;
 
-pub struct Function<'a> {
-    arity: usize,
-    chunk: Chunk<'a>,
-    name: &'a str,
+#[derive(Debug, PartialEq)]
+pub struct Function {
+    pub arity: usize,
+    pub chunk: Chunk,
+    pub name: Rc<String>,
 }
 
-pub enum Object<'a> {
-    Function(Function<'a>),
+#[derive(Debug, PartialEq)]
+pub struct UpValue {
+    pub value: Rc<Value>,
 }
 
-#[derive(Clone)]
-pub enum Value<'a> {
+#[derive(Debug, PartialEq)]
+pub enum Object {
+    Function(Rc<Function>),
+    UpValue(Rc<UpValue>),
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Value {
     Number(f64),
     Boolean(bool),
     Nil,
-    String(&'a str),
-    Object(&'a Object<'a>),
+    String(Rc<String>),
+    Symbol(Rc<String>),
+    Object(Object),
 }

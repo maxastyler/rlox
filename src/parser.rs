@@ -5,7 +5,7 @@ use nom::{
     error::ParseError,
     multi::{many1, separated_list0, separated_list1},
     number::complete::double,
-    sequence::{delimited, preceded, tuple},
+    sequence::{delimited, tuple},
     AsChar, IResult, InputLength, InputTakeAtPosition, Parser,
 };
 
@@ -15,7 +15,7 @@ use crate::ast::{
 
 const RESERVED_STRINGS: &[&str] = &["=>", "let", "cond", "fn"];
 
-const RESERVED_CHARS: &[char] = &['(', ')', '{', '}', '.', ';', ',', '!'];
+const RESERVED_CHARS: &[char] = &['(', ')', '{', '}', '.', ';', ',', '!', '"'];
 
 fn nil(input: &str) -> IResult<&str, Literal> {
     let (s, _) = tag("nil")(input)?;
@@ -136,11 +136,7 @@ fn function(input: &str) -> IResult<&str, Function> {
 }
 
 fn literal(input: &str) -> IResult<&str, Literal> {
-    nil.or(number)
-        .or(true_lit)
-        .or(false_lit)
-        .or(symbol.map(Literal::Symbol))
-        .parse(input)
+    nil.or(number).or(true_lit).or(false_lit).parse(input)
 }
 
 fn parenthesised(input: &str) -> IResult<&str, Parenthesised> {
@@ -159,6 +155,7 @@ fn l1(input: &str) -> IResult<&str, Expression> {
         .or(parenthesised.map(|x| Expression::Parenthesised(Box::new(x))))
         .or(function.map(|x| Expression::Function(Box::new(x))))
         .or(literal.map(Expression::Literal))
+        .or(symbol.map(Expression::Symbol))
         .parse(input)
 }
 
@@ -292,7 +289,7 @@ mod tests {
                     Expression::Assignment(Box::new(Assignment {
                         identifier: Symbol("x".into()),
                         value: Expression::Call(Box::new(Call {
-                            function: Expression::Literal(Literal::Symbol(Symbol("s".into()))),
+                            function: Expression::Symbol(Symbol("s".into())),
                             arguments: vec![Expression::Literal(Literal::Number(4.0))]
                         }))
                     }))
@@ -324,10 +321,10 @@ mod tests {
                     identifier: Some(Symbol("x".into())),
                     arguments: vec![Symbol("a".into()), Symbol("b".into()), Symbol("c".into())],
                     block: Block(vec![Expression::Call(Box::new(Call {
-                        function: Expression::Literal(Literal::Symbol(Symbol("*".into()))),
+                        function: Expression::Symbol(Symbol("*".into())),
                         arguments: vec![
-                            Expression::Literal(Literal::Symbol(Symbol("x".into()))),
-                            Expression::Literal(Literal::Symbol(Symbol("a".into())))
+                            Expression::Symbol(Symbol("x".into())),
+                            Expression::Symbol(Symbol("a".into()))
                         ]
                     }))])
                 }

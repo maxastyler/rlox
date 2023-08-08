@@ -1,18 +1,22 @@
 use crate::{
-    ast::{Expression, Symbol},
+    ast::{Expression, Literal, Symbol},
     chunk::Chunk,
     parser::parse,
+    value::Value,
 };
 
+#[derive(Debug, PartialEq)]
 pub struct Local {
     name: Symbol,
     depth: usize,
 }
 
+#[derive(Debug, PartialEq)]
 pub struct Compiler {
-    depth: usize,
-    locals_count: usize,
-    locals: Vec<Local>,
+    pub depth: usize,
+    pub locals: Vec<Local>,
+    pub locals_count: usize,
+    pub chunk: Chunk,
 }
 
 impl Compiler {
@@ -21,21 +25,14 @@ impl Compiler {
             depth: 0,
             locals_count: 0,
             locals: vec![],
+            chunk: Chunk::default(),
         }
     }
-
-    pub fn compile(&mut self, source: &str) -> Chunk {
-        let Ok((rest, ast)) = parse(source);
-        let mut chunk = Chunk::default();
-        ast.into_iter()
-            .for_each(|e| self.compile_expression(&mut chunk, e));
-        chunk
+    pub fn enter_block(&mut self) {
+        self.depth += 1;
     }
 
-    fn compile_expression(&mut self, chunk: &mut Chunk, expression: Expression) {
-        match expression {
-            Expression::Call(c) => {}
-            _ => unimplemented!(),
-        }
+    pub fn exit_block(&mut self) {
+        self.depth -= 1;
     }
 }

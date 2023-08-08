@@ -1,3 +1,5 @@
+#![feature(hash_set_entry)]
+
 use std::{
     fs::File,
     io::{self, BufRead, BufReader, Read},
@@ -8,7 +10,6 @@ use vm::VM;
 pub mod ast;
 pub mod chunk;
 pub mod compiler;
-pub mod debug;
 pub mod gc;
 pub mod parser;
 pub mod scanner;
@@ -29,7 +30,7 @@ pub fn repl(mut vm: VM) {
             }
             _ => {}
         };
-        vm.interpret(&buffer);
+        // vm.interpret(&buffer);
     }
 }
 
@@ -38,7 +39,7 @@ pub fn run_file(mut vm: VM, path: &str) {
     let mut buf_reader = BufReader::new(file);
     let mut contents = String::new();
     buf_reader.read_to_string(&mut contents).unwrap();
-    vm.interpret(&contents);
+    // vm.interpret(&contents);
 }
 
 #[cfg(test)]

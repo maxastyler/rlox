@@ -1,29 +1,29 @@
-#![allow(non_camel_case_types)]
-use num_enum::{IntoPrimitive, TryFromPrimitive};
+use std::rc::Rc;
 
 use crate::value::Value;
 
-pub enum OpCode<'a> {
+#[derive(Debug, PartialEq)]
+pub enum OpCode {
     Constant(usize),
     Return,
     Tail,
     GetLocal(usize),
-    GetGlobal(&'a str),
+    GetGlobal(Rc<String>),
     SetLocal(usize, Value),
-    SetGlobal(&'a str, Value),
+    SetGlobal(Rc<String>, Value),
 }
 
-#[derive(Default)]
-pub struct Chunk<'a> {
-    pub codes: Vec<OpCode<'a>>,
-    pub constants: Vec<Value>,
+#[derive(Default, Debug, PartialEq)]
+pub struct Chunk {
+    pub codes: Vec<OpCode>,
+    pub constants: Vec<Rc<Value>>,
 }
 
-impl<'a> Chunk<'a> {
-    fn add_constant(&mut self, value: Value) -> &mut Self {
+impl Chunk {
+    pub fn add_constant(&mut self, value: Value) -> &mut Self {
         let index = self.constants.len();
-        self.constants.append(value);
-        self.codes.append(OpCode::Constant(index));
+        self.constants.push(Rc::new(value));
+        self.codes.push(OpCode::Constant(index));
         self
     }
 }

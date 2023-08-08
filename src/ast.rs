@@ -19,7 +19,6 @@ pub enum Literal {
     Number(f64),
     String(String),
     Boolean(bool),
-    Symbol(Symbol),
 }
 #[derive(Debug, PartialEq)]
 pub struct Parenthesised(pub Vec<Expression>);
@@ -46,4 +45,5 @@ pub enum Expression {
     Assignment(Box<Assignment>),
     Function(Box<Function>),
     Literal(Literal),
+    Symbol(Symbol),
 }

@@ -69,3 +69,7 @@ let z 4
 
 ** Structure of the VM
 Every function call is a chunk, which contains the bytecode, and constants
+
+** What's the problem with the structure?
+
+The function to create the values wants them to live longer

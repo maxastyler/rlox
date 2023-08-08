@@ -1,10 +1,16 @@
 #![allow(non_camel_case_types)]
-use std::collections::{HashMap, HashSet};
+
+use std::{
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
 
 use crate::{
+    ast::{Expression, Literal, Symbol},
     chunk::{Chunk, OpCode},
-    compile::{self, compile},
-    value::Value,
+    compiler::Compiler,
+    parser::parse,
+    value::{Function, Value},
 };
 
 pub enum InterpretError {
@@ -12,24 +18,31 @@ pub enum InterpretError {
     INTERPRET_RUNTIME_ERROR,
 }
 
-#[derive(Default)]
-pub struct VM<'a> {
-    chunk_positions: Vec<(Chunk<'a>, usize)>,
-    stack: Vec<&'a Value<'a>>,
-    globals: HashMap<String, Value<'a>>,
-    strings: HashSet<String>,
-    objects: Vec<Value<'a>>,
+pub struct CallFrame {
+    function: Rc<Function>,
+    ip: usize,
+    starting_slot: usize,
 }
 
-impl<'a> VM<'a> {
+#[derive(Default)]
+pub struct VM {
+    frames: Vec<CallFrame>,
+    slots: Vec<Rc<Value>>,
+    globals: HashMap<String, Rc<Value>>,
+    strings: HashSet<Rc<String>>,
+    objects: Vec<Rc<Value>>,
+}
+
+impl VM {
     fn run(&mut self) -> Option<()> {
-        while let Some((chunk, pos)) = self.chunk_positions.last_mut() {
-            match chunk.codes.get(*pos)? {
+        while let Some(frame) = self.frames.last() {
+            match (*frame.function).chunk.codes.get(frame.ip)? {
                 OpCode::Constant(pos) => {
-                    self.stack.push(chunk.constants.get(*pos)?);
+                    self.slots
+                        .push((frame.function.chunk.constants.get(*pos)?).clone());
                 }
                 OpCode::Return => {
-                    self.chunk_positions.pop();
+                    self.frames.pop();
                 }
                 OpCode::Tail => {
                     self.tail();
@@ -38,15 +51,20 @@ impl<'a> VM<'a> {
                     self.get_local();
                 }
                 _ => unimplemented!(),
-            };
-
-            if *pos + 1 >= chunk.codes.len() {
-                self.chunk_positions.pop();
-            } else {
-                *pos += 1;
             }
+            self.step()?;
         }
-        None
+        Some(())
+    }
+
+    fn step(&mut self) -> Option<()> {
+        let frame = self.frames.last_mut()?;
+        if frame.ip + 1 >= frame.function.chunk.codes.len() {
+            self.frames.pop();
+        } else {
+            frame.ip += 1;
+        }
+        Some(())
     }
 
     fn tail(&mut self) -> &mut Self {
@@ -57,21 +75,72 @@ impl<'a> VM<'a> {
         self
     }
 
-    fn push_chunk(&mut self, chunk: Chunk) -> &mut Self {
-        self.chunk_positions.push((chunk, 0));
+    fn push_frame(&mut self, function: Rc<Function>) -> &mut Self {
+        self.frames.push(CallFrame {
+            function,
+            ip: 0,
+            starting_slot: self.slots.len(),
+        });
         self
     }
 
-    pub fn interpret(&mut self, source: &String) -> Result<(), InterpretError> {
-        let mut chunk = Chunk::default();
-        if compile(&source, &mut chunk) {
-            let mut vm: VM = Default::default();
-            return Ok({
-                vm.run();
-                ()
-            });
-        } else {
-            return Err(InterpretError::INTERPRET_COMPILE_ERROR);
+    fn compile(&mut self, string: &str) -> Vec<Compiler> {
+        let mut compile_stack = vec![Compiler::new()];
+        let (_, exps) = parse(string).unwrap();
+        exps.into_iter().for_each(|e| {
+            self.compile_expression(&mut compile_stack, e);
+        });
+        compile_stack
+    }
+
+    fn intern_string(&mut self, string: String) -> Rc<String> {
+        self.strings.get_or_insert(Rc::new(string)).clone()
+    }
+
+    fn create_value_from_literal(&mut self, literal: Literal) -> Value {
+        match literal {
+            Literal::Nil => Value::Nil,
+            Literal::Number(n) => Value::Number(n),
+            Literal::Boolean(b) => Value::Boolean(b),
+            Literal::String(s) => Value::String(self.intern_string(s)),
         }
+    }
+    fn compile_expression(
+        &mut self,
+        compile_stack: &mut Vec<Compiler>,
+        expression: Expression,
+    ) -> Option<()> {
+        match expression {
+            Expression::Literal(l) => {
+                let value = self.create_value_from_literal(l);
+                let c = compile_stack.last_mut()?;
+                c.chunk.add_constant(value);
+            }
+            _ => unimplemented!(),
+            // Expression::Call(c) => {}
+            // Expression::Parenthesised(p) => {}
+            // Expression::Cond(c) => {}
+            // Expression::Block(b) => {}
+            // Expression::Assignment(a) => {}
+            // Expression::Function(f) => {}
+
+            // Expression::Symbol(s) => {}
+        };
+        Some(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::parser::parse;
+
+    use super::*;
+
+    #[test]
+    fn test_literal_works() {
+        let mut vm = VM::default();
+
+        let c_s = vm.compile("1;2;3;4");
+	assert_eq!(c_s, vec![]);
     }
 }
