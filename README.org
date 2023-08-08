@@ -1,6 +1,8 @@
 * RLOX
 Implementation of lox in Rust from [[https://craftinginterpreters.com/][crafting interpreters]], but with a different syntax.
 
+** Parsing
+
 Everything in the language is an expression - returns a value.
 
 Built in pipe operator
@@ -64,3 +66,6 @@ expression = l4 | assignment
 let x 2
 let y 2
 let z 4
+
+** Structure of the VM
+Every function call is a chunk, which contains the bytecode, and constants

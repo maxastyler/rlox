@@ -1,5 +1,20 @@
-pub type Value = f64;
+use crate::chunk::Chunk;
 
-pub fn print_value(value: &Value) {
-    print!("{}", value);
+pub struct Function<'a> {
+    arity: usize,
+    chunk: Chunk<'a>,
+    name: &'a str,
+}
+
+pub enum Object<'a> {
+    Function(Function<'a>),
+}
+
+#[derive(Clone)]
+pub enum Value<'a> {
+    Number(f64),
+    Boolean(bool),
+    Nil,
+    String(&'a str),
+    Object(&'a Object<'a>),
 }

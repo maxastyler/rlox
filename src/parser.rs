@@ -270,6 +270,10 @@ fn expressions(input: &str) -> IResult<&str, Vec<Expression>> {
         .parse(input)
 }
 
+pub fn parse(input: &str) -> IResult<&str, Vec<Expression>> {
+    expressions(input)
+}
+
 #[cfg(test)]
 mod tests {
 
