@@ -1,4 +1,4 @@
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Symbol(pub String);
 
 #[derive(Debug, PartialEq)]
@@ -46,4 +46,5 @@ pub enum Expression {
     Function(Box<Function>),
     Literal(Literal),
     Symbol(Symbol),
+    Ignored(Box<Expression>),
 }

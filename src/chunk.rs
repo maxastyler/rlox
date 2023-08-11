@@ -6,11 +6,14 @@ use crate::value::Value;
 pub enum OpCode {
     Constant(usize),
     Return,
-    Tail,
+    Pop,
     GetLocal(usize),
     GetGlobal(Rc<String>),
     SetLocal(usize, Value),
     SetGlobal(Rc<String>, Value),
+    CopyToTopFromStack(usize),
+    AssignToSlot(usize),
+    CreateSlot,
 }
 
 #[derive(Default, Debug, PartialEq)]
@@ -25,5 +28,9 @@ impl Chunk {
         self.constants.push(Rc::new(value));
         self.codes.push(OpCode::Constant(index));
         self
+    }
+
+    pub fn add_pop(&mut self) {
+        self.codes.push(OpCode::Pop)
     }
 }

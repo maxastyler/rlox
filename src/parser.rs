@@ -3,7 +3,7 @@ use nom::{
     character::complete::{multispace0, multispace1},
     combinator::opt,
     error::ParseError,
-    multi::{many1, separated_list0, separated_list1},
+    multi::{many0, many1, separated_list0, separated_list1},
     number::complete::double,
     sequence::{delimited, tuple},
     AsChar, IResult, InputLength, InputTakeAtPosition, Parser,
@@ -254,17 +254,21 @@ fn cond(input: &str) -> IResult<&str, Cond> {
 }
 
 fn expression(input: &str) -> IResult<&str, Expression> {
-    assignment
+    let (s, ex) = assignment
         .map(|x| Expression::Assignment(Box::new(x)))
         .or(cond.map(|x| Expression::Cond(Box::new(x))))
         .or(l4)
-        .parse(input)
+        .parse(input)?;
+    let (s, ignored) = opt(tuple((multispace0, tag(";"))))(s)?;
+    if ignored.is_some() {
+        Ok((s, Expression::Ignored(Box::new(ex))))
+    } else {
+        Ok((s, ex))
+    }
 }
 
 fn expressions(input: &str) -> IResult<&str, Vec<Expression>> {
-    separated_delimited_list0(s_d(tag(";")), expression)
-        .map(|(x, _)| x)
-        .parse(input)
+    many0(delimited(multispace0, expression, multispace0))(input)
 }
 
 pub fn parse(input: &str) -> IResult<&str, Vec<Expression>> {
@@ -280,12 +284,12 @@ mod tests {
     #[test]
     fn test_expressions() {
         assert_eq!(
-            expressions(";;\n\n2\n;; 3.1; let x \n\n s 4"),
+            expressions("\n\n2\n; 3.1; let x \n\n s 4"),
             Ok((
                 "",
                 vec![
-                    Expression::Literal(Literal::Number(2.0)),
-                    Expression::Literal(Literal::Number(3.1)),
+                    Expression::Ignored(Box::new(Expression::Literal(Literal::Number(2.0)))),
+                    Expression::Ignored(Box::new(Expression::Literal(Literal::Number(3.1)))),
                     Expression::Assignment(Box::new(Assignment {
                         identifier: Symbol("x".into()),
                         value: Expression::Call(Box::new(Call {

@@ -1,7 +1,6 @@
 use rlox::{
     chunk::{Chunk, OpCode},
-    repl,
-    vm::VM,
+
 };
 use std::rc::Rc;
 
