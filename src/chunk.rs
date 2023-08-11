@@ -8,9 +8,8 @@ pub enum OpCode {
     Return,
     Pop,
     GetLocal(usize),
-    GetGlobal(Rc<String>),
+    GetUpValue(usize),
     SetLocal(usize, Value),
-    SetGlobal(Rc<String>, Value),
     CopyToTopFromStack(usize),
     AssignToSlot(usize),
     CreateSlot,
@@ -23,11 +22,11 @@ pub struct Chunk {
 }
 
 impl Chunk {
-    pub fn add_constant(&mut self, value: Value) -> &mut Self {
+    pub fn add_constant(&mut self, value: Value) -> usize {
         let index = self.constants.len();
         self.constants.push(Rc::new(value));
         self.codes.push(OpCode::Constant(index));
-        self
+        index
     }
 
     pub fn add_pop(&mut self) {

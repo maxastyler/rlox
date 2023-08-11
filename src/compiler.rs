@@ -1,268 +1,277 @@
-use std::{collections::HashSet, rc::Rc};
+use std::{borrow::BorrowMut, cell::RefCell, collections::HashSet, fmt::Arguments, rc::Rc};
 
 use crate::{
-    ast::{Assignment, Expression, Function, Literal, Symbol},
+    ast::{Assignment, Block, Expression, Function, Literal, Symbol},
     chunk::{Chunk, OpCode},
-    parser::parse,
-    value::{UpValue, Value},
+    value::{self, Object, Value},
 };
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct Local {
-    pub name: Rc<String>,
-    pub depth: usize,
+#[derive(Debug)]
+pub struct Identity {
+    name: Rc<String>,
+}
+
+impl PartialEq for Identity {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.name, &other.name)
+    }
 }
 
 #[derive(Debug, PartialEq)]
-pub struct SubCompiler {
-    pub locals: Vec<Local>,
-    pub chunk: Chunk,
-    pub name: Rc<String>,
+pub struct Local {
+    pub identity: Identity,
     pub depth: usize,
-    pub upvalues: Vec<UpValue>,
-    pub offset: usize,
+    pub captured: bool,
 }
 
-impl SubCompiler {
-    pub fn new(call_depth: usize, name: Rc<String>) -> Self {
-        SubCompiler {
-            offset: 0,
+#[derive(Debug, PartialEq)]
+pub struct UpValue {
+    pub index: usize,
+    pub local: bool,
+}
+
+pub struct FunctionCompiler {
+    pub locals: Vec<Local>,
+    pub depth: usize,
+}
+
+impl FunctionCompiler {}
+
+#[derive(Debug, PartialEq)]
+pub struct Compiler {
+    pub locals: Vec<Local>,
+    pub upvalues: Vec<UpValue>,
+    pub depth: usize,
+    pub offset: usize,
+    pub strings: HashSet<Rc<String>>,
+    pub previous: Option<Box<Compiler>>,
+    pub chunk: Chunk,
+}
+
+impl Compiler {
+    pub fn new() -> Self {
+        Compiler {
             locals: vec![],
-            depth: call_depth + 1,
-            name,
-            chunk: Chunk::default(),
             upvalues: vec![],
+            depth: 0,
+            offset: 0,
+            strings: HashSet::new(),
+            previous: None,
+            chunk: Chunk::default(),
         }
     }
 
-    pub fn enter_block(&mut self) {
-        self.depth += 1;
+    fn intern_symbol(&mut self, symbol: &Symbol) -> Rc<String> {
+        self.intern_string(&symbol.0)
     }
 
-    pub fn exit_block(&mut self) {
-        self.depth -= 1;
+    fn intern_string(&mut self, string: &String) -> Rc<String> {
+        self.strings.get_or_insert(Rc::new(string.clone())).clone()
     }
 
-    pub fn add_pop(&mut self) {
-        self.chunk.add_pop();
+    fn pop_function(self, function: &Function) -> Option<(Compiler, value::Function)> {
+        // Do popping stuff
+        let mut c = *(self.previous?);
+        c.strings = self.strings;
+        Some((
+            c,
+            value::Function {
+                arity: function.arguments.len(),
+                chunk: self.chunk,
+            },
+        ))
     }
 
-    pub fn get_from_stack(&mut self, position: usize) {
-        self.chunk.codes.push(OpCode::CopyToTopFromStack(position));
-    }
-
-    pub fn add_constant(&mut self, constant: Value) {
-        self.chunk.add_constant(constant);
-    }
-
-    pub fn add_assign_to_slot(&mut self, slot_index: usize) {
-        self.chunk.codes.push(OpCode::AssignToSlot(slot_index));
-    }
-
-    pub fn add_create_slot(&mut self) {
-        self.chunk.codes.push(OpCode::CreateSlot)
-    }
-
-    pub fn create_new_local(&mut self, name: Rc<String>) {
-        self.add_create_slot();
-        self.locals.push(Local {
-            depth: self.depth,
-            name: name,
-        })
-    }
-
-    /// Get the index of the last local that had this symbol
-    pub fn last_declaration(&self, symbol: Symbol) -> Option<(usize, &Local)> {
+    fn find_local(&self, id: &Identity) -> Option<usize> {
         self.locals.iter().enumerate().rev().find_map(|(i, x)| {
-            if *x.clone().name == symbol.0 {
-                Some((i, x))
+            if x.identity == *id {
+                Some(i)
             } else {
                 None
             }
         })
     }
-}
 
-#[derive(Debug, PartialEq)]
-pub struct Compiler {
-    pub sub_compilers: Vec<(usize, SubCompiler)>,
-    pub strings: HashSet<Rc<String>>,
-}
-
-impl Compiler {
-    pub fn new() -> Self {
-        let mut c = Compiler {
-            strings: HashSet::new(),
-            sub_compilers: vec![],
-        };
-        let s = c.intern_string("MAIN".into());
-        c.push_compiler(s);
-        c
-    }
-
-    fn intern_string(&mut self, string: String) -> Rc<String> {
-        self.strings.get_or_insert(Rc::new(string)).clone()
-    }
-
-    pub fn enter_block(&mut self) {
-        if let Some((_, sc)) = self.sub_compilers.last_mut() {
-            sc.enter_block()
-        }
-    }
-
-    pub fn exit_block(&mut self) {
-        if let Some((_, sc)) = self.sub_compilers.last_mut() {
-            sc.exit_block()
-        }
-    }
-
-    pub fn add_constant(&mut self, value: Value) {
-        if let Some((_, sc)) = self.sub_compilers.last_mut() {
-            sc.add_constant(value)
-        }
-    }
-
-    pub fn expression(&mut self, expression: &Expression) -> Option<()> {
-        None
-    }
-
-    pub fn add_assignment(&mut self, assignment: &Assignment) -> Option<()> {
-        self.expression(&assignment.value);
-        if let Some((i, l)) = self.last_declaration(&assignment.identifier) {
-            if l.depth == self.sub_compilers.last_mut()?.1.depth {
-                // The assignment is at the same depth as the previous assignment
-                // to this symbol, assign in its place
-                self.sub_compilers.last_mut()?.1.add_assign_to_slot(i);
-                return None;
+    fn find_nonlocal(&mut self, id: &Identity) -> Option<usize> {
+        if let Some(x) = self.previous.as_mut() {
+            if let Some(i) = x.find_local(id) {
+                // This captures a local variable in the surrounding environment
+                x.locals[i].captured = true;
+                Some(self.add_upvalue(UpValue {
+                    index: i,
+                    local: true,
+                }))
+            } else if let Some(i) = x.find_nonlocal(id) {
+                // There is no local variable in the surrounding environment, search higher
+                Some(self.add_upvalue(UpValue {
+                    index: i,
+                    local: false,
+                }))
+            } else {
+                None
             }
+        } else {
+            None
         }
-        let s = self.intern_string(assignment.identifier.0.clone());
-        self.sub_compilers.last_mut()?.1.create_new_local(s);
-        None
     }
 
-    pub fn push_compiler(&mut self, name: Rc<String>) {
-        let new_sc = if let Some(sc) = self.sub_compilers.last() {
-            let pos = sc.0 + sc.1.locals.len();
-            (pos, SubCompiler::new(sc.1.depth, name))
+    fn add_upvalue(&mut self, upvalue: UpValue) -> usize {
+        if let Some(p) = self.upvalues.iter_mut().position(|x| *x == upvalue) {
+            p
         } else {
-            (0, SubCompiler::new(0, name))
+            self.upvalues.push(upvalue);
+            self.upvalues.len() - 1
+        }
+    }
+
+    fn generate_symbol(&mut self, symbol: &Symbol) -> Option<()> {
+        let s = self.intern_symbol(symbol);
+        let identity = Identity { name: s };
+        if let Some(index) = self.find_local(&identity) {
+            self.chunk.codes.push(OpCode::GetLocal(index));
+            Some(())
+        } else if let Some(index) = self.find_nonlocal(&identity) {
+            // try to find the value in an enclosing context
+            self.chunk.codes.push(OpCode::GetUpValue(index));
+            Some(())
+        } else {
+            None
+        }
+    }
+
+    fn add_symbol_to_locals(&mut self, symbol: &Symbol) {
+        let s = self.intern_symbol(&symbol);
+        self.locals.push(Local {
+            identity: Identity { name: s },
+            captured: false,
+            depth: self.depth,
+        });
+    }
+
+    fn generate_assignment(mut self, assignment: &Assignment) -> Option<Self> {
+        self.add_symbol_to_locals(&assignment.identifier);
+        self.compile_expression(&assignment.value) // result of the expression will be on the stack
+    }
+
+    fn generate_literal(&mut self, literal: &Literal) {
+        let value = self.create_value_from_literal(literal.clone());
+        self.chunk.add_constant(value);
+    }
+
+    fn pop_value(&mut self) {
+        self.chunk.add_pop()
+    }
+
+    fn generate_ignored(self, expression: &Expression) -> Option<Self> {
+        let mut c = self.compile_expression(expression)?;
+        c.pop_value();
+        Some(c)
+    }
+
+    fn create_value_from_literal(&mut self, literal: Literal) -> Value {
+        match literal {
+            Literal::Nil => Value::Nil,
+            Literal::Number(n) => Value::Number(n),
+            Literal::Boolean(b) => Value::Boolean(b),
+            Literal::String(s) => Value::String(self.intern_string(&s)),
+        }
+    }
+
+    pub fn compile_expression(mut self, expression: &Expression) -> Option<Self> {
+        match expression {
+            Expression::Assignment(assignment) => self.generate_assignment(assignment),
+            Expression::Literal(l) => {
+                self.generate_literal(l);
+                Some(self)
+            }
+            Expression::Block(block) => self.compile_block(block),
+            Expression::Symbol(sym) => {
+                self.generate_symbol(sym);
+                Some(self)
+            }
+            Expression::Ignored(e) => {
+                let c = self.generate_ignored(e)?;
+                Some(c)
+            }
+            Expression::Function(f) => {
+                let c = self.generate_function(f)?;
+                Some(c)
+            }
+
+            _ => unimplemented!(),
+        }
+    }
+
+    pub fn compile_block(mut self, block: &Block) -> Option<Self> {
+        self.depth += 1;
+        let mut c = self;
+
+        for e in block.0.iter() {
+            c = c.compile_expression(e).unwrap();
+        }
+        if block.0.len() == 0 || matches!(block.0.last().unwrap(), Expression::Ignored(_)) {
+            c.generate_literal(&Literal::Nil);
+        }
+        c.depth -= 1;
+        Some(c)
+    }
+
+    pub fn generate_function(self, function: &Function) -> Option<Self> {
+        let mut new_compiler = Compiler {
+            upvalues: vec![],
+            depth: self.depth + 1,
+            locals: vec![],
+            strings: self.strings.clone(),
+            offset: self.offset + self.locals.len(),
+            previous: Some(Box::new(self)),
+            chunk: Chunk::default(),
         };
-        self.sub_compilers.push(new_sc);
-    }
 
-    pub fn compile_function(&mut self, function: Function) {}
-
-    /// Get the index of the last declaration
-    pub fn last_declaration(&self, symbol: &Symbol) -> Option<(usize, &Local)> {
-        self.sub_compilers.iter().rev().find_map(|(i, sc)| {
-            sc.last_declaration(symbol.clone())
-                .and_then(|(j, l)| Some((j + i, l)))
-        })
-    }
-
-    fn create_upvalue(&mut self, symbol: &Symbol) -> Option<()> {
-        None
-    }
-
-    pub fn read_local(&mut self, symbol: &Symbol) -> Option<()> {
-        if let Some((i, _)) = self
-            .sub_compilers
-            .last()?
-            .1
-            .last_declaration(symbol.clone())
-        {
-            // The last declaration was in this function
-            // Just need to put it onto the top of the stack
-            let pos = self.sub_compilers.last()?.0;
-            self.sub_compilers.last_mut()?.1.get_from_stack(i + pos);
-        } else {
-            // The last declaration was out of this function
-            // Need to find/create an upvalue to it
+        for s in function.arguments.iter() {
+            new_compiler.add_symbol_to_locals(&s);
         }
-        None
-        // self.sub_compilers.last_mut()?.1.la
+
+        new_compiler = new_compiler.compile_block(&function.block)?;
+
+        let (mut old_compiler, compiled_fun) = new_compiler.pop_function(function)?;
+        let value = Value::Object(Object::Function(Rc::new(compiled_fun)));
+        let constant_function_index = old_compiler.chunk.add_constant(value);
+	
+        if let Some(id) = function.identifier.clone() {
+            // we need to assign the function to the given identifier
+            old_compiler.add_symbol_to_locals(&id);
+        }
+
+        Some(old_compiler)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::parser::parse;
+
     use super::*;
 
+    fn ass_lit(string: &str, lit: Literal) -> Expression {
+        Expression::Assignment(Box::new(Assignment {
+            identifier: Symbol(string.into()),
+            value: Expression::Literal(lit),
+        }))
+    }
+
+    fn get(string: &str) -> Expression {
+        Expression::Symbol(Symbol(string.into()))
+    }
+
+    fn block(es: Vec<Expression>) -> Expression {
+        Expression::Block(Box::new(Block(es)))
+    }
+
     #[test]
-    fn test_last_declaration() {
+    fn test_something() {
         let mut c = Compiler::new();
-
-        assert_eq!(c.last_declaration(&Symbol("ooh".into())), None);
-        c.add_assignment(&Assignment {
-            identifier: Symbol("hi".into()),
-            value: Expression::Symbol(Symbol("empty".into())),
-        });
-        c.add_assignment(&Assignment {
-            identifier: Symbol("there".into()),
-            value: Expression::Symbol(Symbol("empty".into())),
-        });
-
-        assert_eq!(
-            c.last_declaration(&Symbol("there".into())),
-            Some((
-                1,
-                &Local {
-                    depth: 1,
-                    name: Rc::new("there".into())
-                }
-            ))
-        );
-        assert_eq!(
-            c.last_declaration(&Symbol("hi".into())),
-            Some((
-                0,
-                &Local {
-                    depth: 1,
-                    name: Rc::new("hi".into())
-                }
-            ))
-        );
-        c.push_compiler(Rc::new("Cool FUNCTION".into()));
-        c.add_assignment(&Assignment {
-            identifier: Symbol("hi2".into()),
-            value: Expression::Symbol(Symbol("empty".into())),
-        });
-        c.add_assignment(&Assignment {
-            identifier: Symbol("there".into()),
-            value: Expression::Symbol(Symbol("empty".into())),
-        });
-        assert_eq!(c.sub_compilers.last().unwrap().1.depth, 2);
-
-        assert_eq!(
-            c.last_declaration(&Symbol("there".into())),
-            Some((
-                3,
-                &Local {
-                    depth: 2,
-                    name: Rc::new("there".into())
-                }
-            ))
-        );
-        assert_eq!(
-            c.last_declaration(&Symbol("hi".into())),
-            Some((
-                0,
-                &Local {
-                    depth: 1,
-                    name: Rc::new("hi".into())
-                }
-            ))
-        );
-        assert_eq!(
-            c.last_declaration(&Symbol("hi2".into())),
-            Some((
-                2,
-                &Local {
-                    depth: 2,
-                    name: Rc::new("hi2".into())
-                }
-            ))
-        );
+        let (_, e) = parse("fn x (a, b) {fn y () {a};}").unwrap();
+        c = c.compile_expression(&e[0]).unwrap();
+        assert_eq!(c, Compiler::new());
     }
 }

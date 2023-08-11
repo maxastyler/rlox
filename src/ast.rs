@@ -13,13 +13,37 @@ pub struct Assignment {
     pub value: Expression,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Literal {
     Nil,
     Number(f64),
     String(String),
     Boolean(bool),
 }
+
+impl From<String> for Literal {
+    fn from(value: String) -> Self {
+        Literal::String(value)
+    }
+}
+impl From<&str> for Literal {
+    fn from(value: &str) -> Self {
+        Literal::String(value.into())
+    }
+}
+
+impl From<f64> for Literal {
+    fn from(value: f64) -> Self {
+        Literal::Number(value)
+    }
+}
+
+impl From<bool> for Literal {
+    fn from(value: bool) -> Self {
+        Literal::Boolean(value)
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct Parenthesised(pub Vec<Expression>);
 #[derive(Debug, PartialEq)]

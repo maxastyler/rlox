@@ -90,14 +90,6 @@ impl VM {
     }
 
 
-    fn create_value_from_literal(&mut self, literal: Literal) -> Value {
-        match literal {
-            Literal::Nil => Value::Nil,
-            Literal::Number(n) => Value::Number(n),
-            Literal::Boolean(b) => Value::Boolean(b),
-            Literal::String(s) => Value::String(self.intern_string(s)),
-        }
-    }
 
     fn compile_expression(
         &mut self,

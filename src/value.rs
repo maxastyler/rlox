@@ -6,7 +6,6 @@ use crate::chunk::Chunk;
 pub struct Function {
     pub arity: usize,
     pub chunk: Chunk,
-    pub name: Rc<String>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -19,6 +18,7 @@ pub struct UpValue {
 pub enum Object {
     Function(Rc<Function>),
     UpValue(Rc<UpValue>),
+    Closure(Vec<Rc<UpValue>>, Rc<Function>),
 }
 
 #[derive(Debug, PartialEq)]
