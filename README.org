@@ -73,3 +73,48 @@ Every function call is a chunk, which contains the bytecode, and constants
 ** What's the problem with the structure?
 
 The function to create the values wants them to live longer
+
+** What expressions are there, and what are the bytecodes they produce?
+
+- Symbol
+  Gets the value associated to the symbol.
+  Op codes: [FindInStack(position of symbol in stack)]
+  Effect: +1
+- Ignored
+  This wraps an expression, to ignore its value
+  Op codes: [Pop]
+  Effect: -1
+- Literal
+  Represents a literal value
+  Op codes: [Constant(position in constant table for chunk)]
+  Effect: +1
+- Function
+  Represents a function. If there is a symbol, assigns the symbol to the function
+  in the current scope.
+  Op codes: [CreateClosure AddUpvalue(upvalue index) EndClosure (Assign to symbol) Push Closure]
+  Effect: +1
+- Assignment
+  Assignment of a value to a name
+  Op codes: [Assign(index of previous) | Create()]
+  Effect: +1
+- Block
+  Run a block of expressions, then discard all variables declared inside block
+  Op codes [(inside expressions) (pop all variables) (push result of last expression in block)]
+  Effect: +1
+- Parenthesised
+  Parenthesise an expression
+  Op codes [expressions]
+  This is just a syntactic thing...
+  Effect: +1
+- Call
+  Call a closure
+  Call op code creates a new stack frame, assuming the parameters and closure have been pushed
+  onto the stack
+  Op codes: [Call (do expressions) push result]
+  Effect: +1
+- Cond
+  Do a cond block
+  Have all the different branches, each one pointing at the next thing
+  Result is the individual result of each one
+  Effect: +1
+

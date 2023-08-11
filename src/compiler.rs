@@ -20,11 +20,13 @@ pub struct SubCompiler {
     pub name: Rc<String>,
     pub depth: usize,
     pub upvalues: Vec<UpValue>,
+    pub offset: usize,
 }
 
 impl SubCompiler {
     pub fn new(call_depth: usize, name: Rc<String>) -> Self {
         SubCompiler {
+            offset: 0,
             locals: vec![],
             depth: call_depth + 1,
             name,
@@ -159,16 +161,24 @@ impl Compiler {
         })
     }
 
-    pub fn read_local(&self, symbol: &Symbol) -> Option<()> {
+    fn create_upvalue(&mut self, symbol: &Symbol) -> Option<()> {
+        None
+    }
+
+    pub fn read_local(&mut self, symbol: &Symbol) -> Option<()> {
         if let Some((i, _)) = self
             .sub_compilers
             .last()?
             .1
             .last_declaration(symbol.clone())
         {
-	    // The last declaration was in this function
+            // The last declaration was in this function
+            // Just need to put it onto the top of the stack
+            let pos = self.sub_compilers.last()?.0;
+            self.sub_compilers.last_mut()?.1.get_from_stack(i + pos);
         } else {
-	    // The last declaration was out of this function
+            // The last declaration was out of this function
+            // Need to find/create an upvalue to it
         }
         None
         // self.sub_compilers.last_mut()?.1.la

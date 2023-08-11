@@ -12,6 +12,7 @@ pub struct Function {
 #[derive(Debug, PartialEq)]
 pub struct UpValue {
     pub value: Rc<Value>,
+    pub closed: bool,
 }
 
 #[derive(Debug, PartialEq)]
